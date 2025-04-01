@@ -1,0 +1,173 @@
+@page "/news/details/{id}"
+@using newsmng_bussinessobject
+@using newsmng_repository
+@inject INewsArticleRepository newsRepository
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+<PageTitle>News Article Details</PageTitle>
+
+<h1>Details</h1>
+
+@if (loading)
+{
+    <p><em>Loading...</em></p>
+}
+else if (error)
+{
+    <div class="alert alert-danger">
+        <h4>Error Loading Article</h4>
+        <p>@errorMessage</p>
+        <a href="/news" class="btn btn-primary">Return to List</a>
+    </div>
+}
+else if (article == null)
+{
+    <div class="alert alert-warning">
+        <h4>Article Not Found</h4>
+        <p>The requested article could not be found.</p>
+        <a href="/news" class="btn btn-primary">Return to List</a>
+    </div>
+}
+else
+{
+    <div>
+        <h4>NewsArticle</h4>
+        <hr />
+        <dl class="row">
+            <dt class="col-sm-2">
+                Article ID
+            </dt>
+            <dd class="col-sm-10">
+                @article.NewsArticleId
+            </dd>
+            <dt class="col-sm-2">
+                News Title
+            </dt>
+            <dd class="col-sm-10">
+                @article.NewsTitle
+            </dd>
+            <dt class="col-sm-2">
+                Headline
+            </dt>
+            <dd class="col-sm-10">
+                @article.Headline
+            </dd>
+            <dt class="col-sm-2">
+                Created Date
+            </dt>
+            <dd class="col-sm-10">
+                @(article.CreatedDate?.ToString("yyyy-MM-dd HH:mm") ?? "N/A")
+            </dd>
+            <dt class="col-sm-2">
+                News Content
+            </dt>
+            <dd class="col-sm-10">
+                @((article.NewsContent != null) ? (MarkupString)article.NewsContent : new MarkupString("N/A"))
+            </dd>
+            <dt class="col-sm-2">
+                News Source
+            </dt>
+            <dd class="col-sm-10">
+                @(article.NewsSource ?? "N/A")
+            </dd>
+            <dt class="col-sm-2">
+                News Status
+            </dt>
+            <dd class="col-sm-10">
+                @(article.NewsStatus == true ? "Active" : "Inactive")
+            </dd>
+            <dt class="col-sm-2">
+                Updated By
+            </dt>
+            <dd class="col-sm-10">
+                @(article.UpdatedById?.ToString() ?? "N/A")
+            </dd>
+            <dt class="col-sm-2">
+                Modified Date
+            </dt>
+            <dd class="col-sm-10">
+                @(article.ModifiedDate?.ToString("yyyy-MM-dd HH:mm") ?? "N/A")
+            </dd>
+            <dt class="col-sm-2">
+                Category
+            </dt>
+            <dd class="col-sm-10">
+                @(article.Category?.CategoryName ?? "N/A")
+            </dd>
+            <dt class="col-sm-2">
+                Created By
+            </dt>
+            <dd class="col-sm-10">
+                @(article.CreatedBy?.AccountName ?? "N/A")
+            </dd>
+        </dl>
+    </div>
+    <div>
+        <a href="@($"/news/edit/{article.NewsArticleId}")" class="btn btn-warning">Edit</a>
+        <a href="/news" class="btn btn-secondary">Back to List</a>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public string? Id { get; set; }
+
+    private NewsArticle? article;
+    private bool loading = true;
+    private bool error = false;
+    private string errorMessage = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        LoadArticle();
+    }
+
+    protected override void OnParametersSet()
+    {
+        // This gets called when parameters change
+        LoadArticle();
+    }
+
+    private void LoadArticle()
+    {
+        try
+        {
+            loading = true;
+            error = false;
+            
+            Console.WriteLine($"Attempting to load article with ID: {Id}");
+            
+            if (string.IsNullOrEmpty(Id))
+            {
+                error = true;
+                errorMessage = "No article ID was provided.";
+                Console.WriteLine("Error: No article ID was provided.");
+                return;
+            }
+
+            article = newsRepository.GetOne(Id);
+            
+            if (article == null)
+            {
+                error = true;
+                errorMessage = $"Article with ID '{Id}' was not found.";
+                Console.WriteLine($"Error: Article with ID '{Id}' was not found.");
+            }
+            else
+            {
+                Console.WriteLine($"Successfully loaded article: {article.NewsTitle}");
+            }
+        }
+        catch (Exception ex)
+        {
+            error = true;
+            errorMessage = $"An error occurred: {ex.Message}";
+            Console.WriteLine($"Exception occurred: {ex}");
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+}

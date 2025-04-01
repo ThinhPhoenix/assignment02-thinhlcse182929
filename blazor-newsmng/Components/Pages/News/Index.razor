@@ -1,0 +1,272 @@
+@page "/news"
+@page "/news/{Page:int?}"
+@using newsmng_bussinessobject
+@using newsmng_repository
+@using System.Text.Json
+@inject INewsArticleRepository newsRepository
+@inject ISystemAccountRepository accountRepository
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+<PageTitle>News Articles</PageTitle>
+
+@if (currentUser != null)
+{
+    <h1>Hello @(currentUser.AccountName)</h1>
+}
+else
+{
+    <h1>Hello Guest</h1>
+}
+
+<p>
+    <a href="/news/create" class="btn btn-primary">Create New</a>
+</p>
+
+<div class="search mb-3">
+    <div class="row g-2">
+        <div class="col-md-4">
+            <input type="text" class="form-control" @bind="searchNewsTitle" placeholder="Search by news title..." />
+        </div>
+        <div class="col-md-4">
+            <input type="text" class="form-control" @bind="searchNewsContent" placeholder="Search by news content..." />
+        </div>
+        <div class="col-md-2">
+            <button class="btn btn-primary" @onclick="Search">Search</button>
+        </div>
+    </div>
+</div>
+
+@if (loading)
+{
+    <p><em>Loading...</em></p>
+}
+else if (error)
+{
+    <div class="alert alert-danger">
+        <p>@errorMessage</p>
+    </div>
+}
+else
+{
+    <div class="pagination d-flex gap-3 mb-3">
+        @if (currentPage > 1)
+        {
+            <button @onclick="PreviousPage" class="btn btn-sm btn-outline-secondary">Previous</button>
+        }
+        <span class="align-self-center">Page @currentPage of @totalPages</span>
+        @if (currentPage < totalPages)
+        {
+            <button @onclick="NextPage" class="btn btn-sm btn-outline-secondary">Next</button>
+        }
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Headline</th>
+                    <th>Created Date</th>
+                    <th>Content</th>
+                    <th>Source</th>
+                    <th>Status</th>
+                    <th>Updated By</th>
+                    <th>Modified Date</th>
+                    <th>Category</th>
+                    <th>Created By</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var article in articles)
+                {
+                    <tr>
+                        <td>@article.NewsTitle</td>
+                        <td>@article.Headline</td>
+                        <td>@(article.CreatedDate?.ToString("yyyy-MM-dd") ?? "N/A")</td>
+                        <td>@(article.NewsContent?.Length > 30 ? article.NewsContent.Substring(0, 30) + "..." : article.NewsContent)</td>
+                        <td>@article.NewsSource</td>
+                        <td>@(article.NewsStatus == true ? "Active" : "Inactive")</td>
+                        <td>@(article.UpdatedById ?? 0)</td>
+                        <td>@(article.ModifiedDate?.ToString("yyyy-MM-dd") ?? "N/A")</td>
+                        <td>@(article.Category?.CategoryName ?? "N/A")</td>
+                        <td>@(article.CreatedBy?.AccountName ?? "N/A")</td>
+                        <td>
+                            <a href="@($"/news/details/{article.NewsArticleId}")" class="btn btn-info btn-sm">Details</a>
+                            <a href="@($"/news/edit/{article.NewsArticleId}")" class="btn btn-warning btn-sm">Edit</a>
+                            <button class="btn btn-danger btn-sm" @onclick="() => DeleteArticle(article.NewsArticleId)">Delete</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public int? Page { get; set; }
+
+    private IList<NewsArticle> articles = new List<NewsArticle>();
+    private SystemAccount? currentUser;
+    private string? searchNewsTitle = "";
+    private string? searchNewsContent = "";
+    private int currentPage = 1;
+    private int totalPages = 1;
+    private int pageSize = 3; // Match the page size in your Razor Pages version
+    private bool loading = true;
+    private bool error = false;
+    private string errorMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await InitializeComponent();
+    }
+
+    private async Task InitializeComponent()
+    {
+        try {
+            loading = true;
+            
+            // Get user from session storage
+            var userJson = await JSRuntime.InvokeAsync<string>("sessionStorage.getItem", "user");
+            if (!string.IsNullOrEmpty(userJson))
+            {
+                currentUser = JsonSerializer.Deserialize<SystemAccount>(userJson);
+            }
+            else
+            {
+                currentUser = new SystemAccount { AccountName = "Guest" };
+            }
+
+            // Get page from query string
+            var uri = new Uri(NavigationManager.Uri);
+            var queryParams = System.Web.HttpUtility.ParseQueryString(uri.Query);
+            
+            if (queryParams["page"] != null && int.TryParse(queryParams["page"], out int page))
+            {
+                currentPage = page;
+            }
+            else if (Page.HasValue && Page.Value > 0)
+            {
+                currentPage = Page.Value;
+            }
+
+            // Get search params from query string
+            if (queryParams["searchNewsTitle"] != null)
+            {
+                searchNewsTitle = queryParams["searchNewsTitle"];
+            }
+            
+            if (queryParams["searchNewsContent"] != null)
+            {
+                searchNewsContent = queryParams["searchNewsContent"];
+            }
+
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            error = true;
+            errorMessage = $"Error loading data: {ex.Message}";
+            Console.WriteLine($"Error details: {ex}");
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task LoadData()
+    {
+        try {
+            loading = true;
+            
+            // Use role-based filtering like in the Razor Pages version
+            dynamic result;
+            
+            if (currentUser != null && currentUser.AccountRole == 1)
+            {
+                // Editor role can see all articles
+                result = newsRepository.Pageable(
+                    newsRepository.Search(searchNewsTitle, searchNewsContent), 
+                    currentPage, 
+                    pageSize
+                );
+            }
+            else
+            {
+                // Other users can only see active articles
+                result = newsRepository.Pageable(
+                    newsRepository.SearchTrue(searchNewsTitle, searchNewsContent), 
+                    currentPage, 
+                    pageSize
+                );
+            }
+            
+            totalPages = result.TotalPages;
+            articles = result.Data;
+            
+            // Update URL to match current state (for bookmarking)
+            UpdateUrl();
+        }
+        catch (Exception ex)
+        {
+            error = true;
+            errorMessage = $"Error loading data: {ex.Message}";
+            Console.WriteLine($"Error details: {ex}");
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private void UpdateUrl()
+    {
+        // Update URL without causing navigation event
+        var url = $"/news?page={currentPage}";
+        
+        if (!string.IsNullOrEmpty(searchNewsTitle))
+            url += $"&searchNewsTitle={Uri.EscapeDataString(searchNewsTitle)}";
+            
+        if (!string.IsNullOrEmpty(searchNewsContent))
+            url += $"&searchNewsContent={Uri.EscapeDataString(searchNewsContent)}";
+            
+        NavigationManager.NavigateTo(url, false);
+    }
+
+    private async Task Search()
+    {
+        currentPage = 1;
+        await LoadData();
+    }
+    
+    private async Task PreviousPage()
+    {
+        if (currentPage > 1)
+        {
+            currentPage--;
+            await LoadData();
+        }
+    }
+    
+    private async Task NextPage()
+    {
+        if (currentPage < totalPages)
+        {
+            currentPage++;
+            await LoadData();
+        }
+    }
+
+    private async Task DeleteArticle(string id)
+    {
+        if (await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to delete this article?"))
+        {
+            newsRepository.Delete(id);
+            await LoadData();
+        }
+    }
+}

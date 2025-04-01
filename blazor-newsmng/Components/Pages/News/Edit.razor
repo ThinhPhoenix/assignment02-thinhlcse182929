@@ -1,0 +1,211 @@
+@page "/news/edit/{id}"
+@using System.ComponentModel.DataAnnotations
+@using newsmng_bussinessobject
+@using newsmng_repository
+@inject INewsArticleRepository newsRepository
+@inject ICategoryRepository categoryRepository
+@inject ISystemAccountRepository accountRepository
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Edit News Article</PageTitle>
+
+<h1>Edit</h1>
+
+<h4>NewsArticle</h4>
+<hr />
+
+@if (article == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <div class="row">
+        <div class="col-md-4">
+            <EditForm Model="@article" OnValidSubmit="UpdateArticle" FormName="editNewsForm">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+                
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="alert alert-danger mb-3">
+                        @errorMessage
+                    </div>
+                }
+                
+                <input type="hidden" @bind-value="article.NewsArticleId" />
+                
+                <div class="form-group mb-3">
+                    <label for="title" class="control-label">News Title</label>
+                    <InputText id="title" @bind-Value="article.NewsTitle" class="form-control" />
+                    <ValidationMessage For="@(() => article.NewsTitle)" />
+                </div>
+                
+                <div class="form-group mb-3">
+                    <label for="headline" class="control-label">Headline</label>
+                    <InputText id="headline" @bind-Value="article.Headline" class="form-control" required />
+                    <ValidationMessage For="@(() => article.Headline)" />
+                </div>
+                
+                <div class="form-group mb-3">
+                    <label for="createdDate" class="control-label">Created Date</label>
+                    <InputDate id="createdDate" @bind-Value="article.CreatedDate" class="form-control" readonly />
+                </div>
+                
+                <div class="form-group mb-3">
+                    <label for="content" class="control-label">News Content</label>
+                    <InputTextArea id="content" @bind-Value="article.NewsContent" class="form-control" rows="5" />
+                    <ValidationMessage For="@(() => article.NewsContent)" />
+                </div>
+                
+                <div class="form-group mb-3">
+                    <label for="source" class="control-label">News Source</label>
+                    <InputText id="source" @bind-Value="article.NewsSource" class="form-control" />
+                    <ValidationMessage For="@(() => article.NewsSource)" />
+                </div>
+                
+                <div class="form-group mb-3">
+                    <label for="category" class="control-label">Category</label>
+                    <InputSelect id="category" @bind-Value="article.CategoryId" class="form-select">
+                        <option value="">-- Select Category --</option>
+                        @if (categories != null)
+                        {
+                            @foreach (var category in categories)
+                            {
+                                <option value="@category.CategoryId">@category.CategoryName</option>
+                            }
+                        }
+                    </InputSelect>
+                    <ValidationMessage For="@(() => article.CategoryId)" />
+                </div>
+                
+                <div class="form-group mb-3">
+                    <label for="status" class="control-label">News Status</label>
+                    <div>
+                        <InputCheckbox id="status" @bind-Value="isActive" class="form-check-input" />
+                        <label class="form-check-label ms-2" for="status">Active</label>
+                    </div>
+                </div>
+                
+                <div class="form-group mb-3">
+                    <label class="control-label">Created By</label>
+                    <input type="text" class="form-control" value="@(createdByName)" disabled />
+                    <input type="hidden" @bind-value="article.CreatedById" />
+                </div>
+                
+                <div class="form-group mb-3">
+                    <button type="submit" class="btn btn-primary">Save</button>
+                    <a href="/news" class="btn btn-secondary ms-2">Cancel</a>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+<div>
+    <a href="/news" class="btn btn-link">Back to List</a>
+</div>
+
+@code {
+    [Parameter]
+    public string Id { get; set; }
+    
+    private NewsArticle article;
+    private List<Category> categories = new();
+    private SystemAccount currentUser;
+    private string createdByName = "Unknown";
+    private bool isActive = true;
+    private string errorMessage;
+    
+    protected override async Task OnInitializedAsync()
+    {
+        // Get current user from session
+        try
+        {
+            var userJson = await JSRuntime.InvokeAsync<string>("sessionStorage.getItem", "user");
+            if (!string.IsNullOrEmpty(userJson))
+            {
+                currentUser = System.Text.Json.JsonSerializer.Deserialize<SystemAccount>(userJson);
+            }
+            else
+            {
+                NavigationManager.NavigateTo("/login");
+                return;
+            }
+        }
+        catch
+        {
+            NavigationManager.NavigateTo("/login");
+            return;
+        }
+        
+        // Load article data
+        if (!string.IsNullOrEmpty(Id))
+        {
+            article = newsRepository.GetOne(Id);
+            
+            if (article == null)
+            {
+                NavigationManager.NavigateTo("/news");
+                return;
+            }
+            
+            // Authorization check: only creator can edit
+            if (article.CreatedById != currentUser.AccountId && currentUser.AccountRole != 0)
+            {
+                NavigationManager.NavigateTo("/unauthorized");
+                return;
+            }
+            
+            // Try to get creator name
+            var createdBy = accountRepository.GetOne(article.CreatedById ?? 0);
+            if (createdBy != null)
+            {
+                createdByName = createdBy.AccountName;
+            }
+            
+            // Set the checkbox state
+            isActive = article.NewsStatus ?? false;
+        }
+        else
+        {
+            NavigationManager.NavigateTo("/news");
+            return;
+        }
+        
+        // Load categories
+        categories = categoryRepository.GetAll();
+    }
+    
+    private void UpdateArticle()
+    {
+        try
+        {
+            // Update modification information
+            article.ModifiedDate = DateTime.Now;
+            article.UpdatedById = currentUser.AccountId;
+            
+            // Update status from checkbox
+            article.NewsStatus = isActive;
+            
+            // Save changes
+            newsRepository.Update(article);
+            
+            // Return to list
+            NavigationManager.NavigateTo("/news");
+        }
+        catch (Exception ex)
+        {
+            // Get inner exception details
+            Exception innerEx = ex;
+            while (innerEx.InnerException != null)
+            {
+                innerEx = innerEx.InnerException;
+            }
+            
+            errorMessage = $"Error updating article: {innerEx.Message}";
+            Console.WriteLine($"Error details: {ex}");
+        }
+    }
+}

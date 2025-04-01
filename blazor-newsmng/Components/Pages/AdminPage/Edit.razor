@@ -1,0 +1,153 @@
+@page "/accounts/edit/{id:int}"
+@using System.ComponentModel.DataAnnotations
+@using newsmng_bussinessobject
+@using newsmng_repository
+@inject ISystemAccountRepository accountRepository
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Edit Account</PageTitle>
+
+<h1>Edit Account</h1>
+
+<hr />
+
+@if (loading)
+{
+    <p><em>Loading...</em></p>
+}
+else if (error)
+{
+    <div class="alert alert-danger">
+        <p>@errorMessage</p>
+        <a href="/accounts" class="btn btn-secondary">Back to List</a>
+    </div>
+}
+else
+{
+    <div class="row">
+        <div class="col-md-4">
+            <EditForm Model="@account" OnValidSubmit="SaveAccount" FormName="editAccountForm">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+
+                <input type="hidden" @bind-value="account.AccountId" />
+
+                <div class="form-group mb-3">
+                    <label for="name" class="control-label">Account Name</label>
+                    <InputText id="name" @bind-Value="account.AccountName" class="form-control" />
+                    <ValidationMessage For="@(() => account.AccountName)" />
+                </div>
+
+                <div class="form-group mb-3">
+                    <label for="email" class="control-label">Email</label>
+                    <InputText id="email" @bind-Value="account.AccountEmail" class="form-control" />
+                    <ValidationMessage For="@(() => account.AccountEmail)" />
+                </div>
+
+                <div class="form-group mb-3">
+                    <label for="password" class="control-label">Password</label>
+                    <InputText id="password" @bind-Value="account.AccountPassword" class="form-control" />
+                    <ValidationMessage For="@(() => account.AccountPassword)" />
+                </div>
+
+                <div class="form-group mb-3">
+                    <label for="role" class="control-label">Role</label>
+                    <InputSelect id="role" @bind-Value="account.AccountRole" class="form-select">
+                        <option value="0">Admin</option>
+                        <option value="1">Editor</option>
+                        <option value="2">User</option>
+                    </InputSelect>
+                    <ValidationMessage For="@(() => account.AccountRole)" />
+                </div>
+
+                <div class="form-group mb-3">
+                    <button type="submit" class="btn btn-primary">Save</button>
+                    <a href="/accounts" class="btn btn-secondary">Cancel</a>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }  // Changed to int for route binding
+
+    private SystemAccount account = new();
+    private bool loading = true;
+    private bool error = false;
+    private string errorMessage = string.Empty;
+    private SystemAccount? currentUser;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // Get current user for authorization check
+            var userJson = await JSRuntime.InvokeAsync<string>("sessionStorage.getItem", "user");
+            if (!string.IsNullOrEmpty(userJson))
+            {
+                currentUser = System.Text.Json.JsonSerializer.Deserialize<SystemAccount>(userJson);
+                
+                // Check if user is admin
+                if (currentUser == null || currentUser.AccountRole != 0)
+                {
+                    NavigationManager.NavigateTo("/unauthorized");
+                    return;
+                }
+            }
+            else
+            {
+                NavigationManager.NavigateTo("/login");
+                return;
+            }
+
+            // Convert the int ID to short if needed
+            short shortId = (short)Id;
+            
+            // Load account to edit - using shortId if your repository expects a short
+            account = accountRepository.GetOne(shortId) ?? new SystemAccount();
+            
+            if (account.AccountId == 0)
+            {
+                error = true;
+                errorMessage = $"Account with ID {Id} not found.";
+            }
+        }
+        catch (Exception ex)
+        {
+            error = true;
+            errorMessage = $"Error loading account: {ex.Message}";
+            Console.WriteLine($"Error details: {ex}");
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task SaveAccount()
+    {
+        try
+        {
+            // Update the account
+            accountRepository.Update(account);
+            
+            // If editing your own account, update the session
+            if (currentUser != null && currentUser.AccountId == account.AccountId)
+            {
+                var updatedJson = System.Text.Json.JsonSerializer.Serialize(account);
+                await JSRuntime.InvokeVoidAsync("sessionStorage.setItem", "user", updatedJson);
+            }
+            
+            NavigationManager.NavigateTo("/accounts");
+        }
+        catch (Exception ex)
+        {
+            error = true;
+            errorMessage = $"Error saving account: {ex.Message}";
+            Console.WriteLine($"Error details: {ex}");
+        }
+    }
+}

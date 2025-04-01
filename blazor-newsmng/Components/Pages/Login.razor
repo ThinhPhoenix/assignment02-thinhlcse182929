@@ -1,0 +1,129 @@
+@page "/login"
+@using System.ComponentModel.DataAnnotations
+@using newsmng_bussinessobject
+@using newsmng_repository
+@using Microsoft.JSInterop
+@inject ISystemAccountRepository systemAccountRepository
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Login</PageTitle>
+
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card mt-5">
+            <div class="card-header">
+                <h3 class="text-center">Login</h3>
+            </div>
+            <div class="card-body">
+                <EditForm Model="@loginModel" OnValidSubmit="HandleLogin" FormName="loginForm" id="loginForm">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary />
+
+                    <div class="form-group mb-3">
+                        <label for="email">Email</label>
+                        <InputText id="email" @bind-Value="loginModel.Email" class="form-control" />
+                        <ValidationMessage For="@(() => loginModel.Email)" />
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <label for="password">Password</label>
+                        <InputText id="password" @bind-Value="loginModel.Password" class="form-control" type="password" />
+                        <ValidationMessage For="@(() => loginModel.Password)" />
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger">@errorMessage</div>
+                    }
+
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">Login</button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private LoginModel loginModel = new();
+    private string? errorMessage;
+
+    protected override void OnInitialized()
+    {
+        // Initialize with empty values to avoid null reference issues
+        loginModel = new LoginModel
+        {
+            Email = string.Empty,
+            Password = string.Empty
+        };
+    }
+
+    private async Task HandleLogin()
+    {
+        errorMessage = null;
+        
+        try
+        {
+            var account = systemAccountRepository.GetAccount(loginModel.Email, loginModel.Password);
+            if (account != null)
+            {
+                // Save user to session storage
+                await SaveUserToSessionAsync(account);
+                
+                // Redirect based on role
+                if (account.AccountRole.HasValue)
+                {
+                    // News roles (1 or 2)
+                    if (account.AccountRole.Value == 1 || account.AccountRole.Value == 2)
+                    {
+                        NavigationManager.NavigateTo("/news");
+                    }
+                    // Admin role (0)
+                    else if (account.AccountRole.Value == 0)
+                    {
+                        NavigationManager.NavigateTo("/accounts");
+                    }
+                    else
+                    {
+                        // Default redirect
+                        NavigationManager.NavigateTo("/");
+                    }
+                }
+                else
+                {
+                    // If no role, go to home
+                    NavigationManager.NavigateTo("/");
+                }
+            }
+            else
+            {
+                errorMessage = "Invalid email or password";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Login failed: {ex.Message}";
+        }
+    }
+
+    private async Task SaveUserToSessionAsync(SystemAccount user)
+    {
+        // Serialize user object to JSON
+        var userJson = System.Text.Json.JsonSerializer.Serialize(user);
+        
+        // Save to sessionStorage
+        await JSRuntime.InvokeVoidAsync("sessionStorage.setItem", "user", userJson);
+    }
+
+    public class LoginModel
+    {
+        [Required(ErrorMessage = "Email is required.")]
+        [EmailAddress(ErrorMessage = "Invalid email format.")]
+        public string Email { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Password is required.")]
+        public string Password { get; set; } = string.Empty;
+    }
+}

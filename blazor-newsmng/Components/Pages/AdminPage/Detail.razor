@@ -1,0 +1,131 @@
+@page "/accounts/details/{id:int}"
+@using newsmng_bussinessobject
+@using newsmng_repository
+@inject ISystemAccountRepository accountRepository
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Account Details</PageTitle>
+
+<h1>Account Details</h1>
+
+<hr />
+
+@if (loading)
+{
+    <p><em>Loading...</em></p>
+}
+else if (error)
+{
+    <div class="alert alert-danger">
+        <p>@errorMessage</p>
+        <a href="/accounts" class="btn btn-secondary">Back to List</a>
+    </div>
+}
+else
+{
+    <div>
+        <dl class="row">
+            <dt class="col-sm-2">
+                Account ID
+            </dt>
+            <dd class="col-sm-10">
+                @account.AccountId
+            </dd>
+            <dt class="col-sm-2">
+                Account Name
+            </dt>
+            <dd class="col-sm-10">
+                @account.AccountName
+            </dd>
+            <dt class="col-sm-2">
+                Email
+            </dt>
+            <dd class="col-sm-10">
+                @account.AccountEmail
+            </dd>
+            <dt class="col-sm-2">
+                Password
+            </dt>
+            <dd class="col-sm-10">
+                @account.AccountPassword
+            </dd>
+            <dt class="col-sm-2">
+                Role
+            </dt>
+            <dd class="col-sm-10">
+                @GetRoleName(account.AccountRole)
+            </dd>
+        </dl>
+    </div>
+    <div>
+        <a href="@($"/accounts/edit/{account.AccountId}")" class="btn btn-warning">Edit</a>
+        <a href="/accounts" class="btn btn-secondary">Back to List</a>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }  // Changed from short to int to match route constraint
+
+    private SystemAccount account = new();
+    private bool loading = true;
+    private bool error = false;
+    private string errorMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // Check if user is admin
+            var userJson = await JSRuntime.InvokeAsync<string>("sessionStorage.getItem", "user");
+            if (!string.IsNullOrEmpty(userJson))
+            {
+                var currentUser = System.Text.Json.JsonSerializer.Deserialize<SystemAccount>(userJson);
+                if (currentUser == null || currentUser.AccountRole != 0)
+                {
+                    NavigationManager.NavigateTo("/unauthorized");
+                    return;
+                }
+            }
+            else
+            {
+                NavigationManager.NavigateTo("/login");
+                return;
+            }
+
+            // Convert from int to short for the repository
+            short shortId = (short)Id;
+            
+            // Load account details
+            account = accountRepository.GetOne(shortId) ?? new SystemAccount();
+            
+            if (account.AccountId == 0)
+            {
+                error = true;
+                errorMessage = $"Account with ID {Id} not found.";
+            }
+        }
+        catch (Exception ex)
+        {
+            error = true;
+            errorMessage = $"Error loading account: {ex.Message}";
+            Console.WriteLine($"Error details: {ex}");
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+    
+    private string GetRoleName(int? role)
+    {
+        return role switch
+        {
+            0 => "Admin",
+            1 => "Staff",     // Changed from "Editor" to "Staff"
+            2 => "Lecturer",  // Changed from "User" to "Lecturer"
+            _ => "Unknown"
+        };
+    }
+}

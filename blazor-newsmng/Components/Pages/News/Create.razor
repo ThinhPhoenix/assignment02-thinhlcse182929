@@ -1,0 +1,217 @@
+@page "/news/create"
+@using System.ComponentModel.DataAnnotations
+@using newsmng_bussinessobject
+@using newsmng_repository
+@inject INewsArticleRepository newsRepository
+@inject ICategoryRepository categoryRepository
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Create News Article</PageTitle>
+
+<h1>Create</h1>
+
+<h4>NewsArticle</h4>
+<hr />
+<div class="row">
+    <div class="col-md-4">
+        <EditForm Model="@article" OnValidSubmit="CreateArticle" FormName="createNewsForm">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+            
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="alert alert-danger mb-3">
+                    @errorMessage
+                </div>
+            }
+            
+            <div class="form-group mb-3">
+                <label for="newsArticleId" class="control-label">News Article ID</label>
+                <InputText id="newsArticleId" @bind-Value="article.NewsArticleId" class="form-control" readonly />
+                <small class="text-muted">Auto-generated ID</small>
+            </div>
+            
+            <div class="form-group mb-3">
+                <label for="title" class="control-label">News Title</label>
+                <InputText id="title" @bind-Value="article.NewsTitle" class="form-control" />
+                <ValidationMessage For="@(() => article.NewsTitle)" />
+            </div>
+            
+            <div class="form-group mb-3">
+                <label for="headline" class="control-label">Headline *</label>
+                <InputText id="headline" @bind-Value="article.Headline" class="form-control" required />
+                <ValidationMessage For="@(() => article.Headline)" />
+                <small class="text-muted">Headline is required</small>
+            </div>
+            
+            <div class="form-group mb-3">
+                <label for="content" class="control-label">News Content</label>
+                <InputTextArea id="content" @bind-Value="article.NewsContent" class="form-control" rows="5" />
+                <ValidationMessage For="@(() => article.NewsContent)" />
+            </div>
+            
+            <div class="form-group mb-3">
+                <label for="source" class="control-label">News Source</label>
+                <InputText id="source" @bind-Value="article.NewsSource" class="form-control" />
+                <ValidationMessage For="@(() => article.NewsSource)" />
+            </div>
+            
+            <div class="form-group mb-3">
+                <label for="category" class="control-label">Category</label>
+                <InputSelect id="category" @bind-Value="article.CategoryId" class="form-select">
+                    <option value="">-- Select Category --</option>
+                    @if (categories != null)
+                    {
+                        @foreach (var category in categories)
+                        {
+                            <option value="@category.CategoryId">@category.CategoryName</option>
+                        }
+                    }
+                </InputSelect>
+                <ValidationMessage For="@(() => article.CategoryId)" />
+            </div>
+            
+            <div class="form-group mb-3">
+                <label for="status" class="control-label">News Status</label>
+                <div>
+                    <InputCheckbox id="status" @bind-Value="isActive" class="form-check-input" />
+                    <label class="form-check-label ms-2" for="status">Active</label>
+                </div>
+            </div>
+            
+            <div class="form-group mb-3">
+                <label class="control-label">Created By</label>
+                <input type="text" class="form-control" value="@(currentUser?.AccountName ?? "Unknown")" disabled />
+            </div>
+            
+            <div class="form-group mb-3">
+                <button type="submit" class="btn btn-primary">Create</button>
+                <a href="/news" class="btn btn-secondary ms-2">Cancel</a>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    private NewsArticle article = new();
+    private List<Category> categories = new();
+    private SystemAccount? currentUser;
+    private bool isActive = true;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Try to get current user from session
+        try
+        {
+            var userJson = await JSRuntime.InvokeAsync<string>("sessionStorage.getItem", "user");
+            if (!string.IsNullOrEmpty(userJson))
+            {
+                currentUser = System.Text.Json.JsonSerializer.Deserialize<SystemAccount>(userJson);
+            }
+        }
+        catch
+        {
+            NavigationManager.NavigateTo("/login");
+            return;
+        }
+
+        // Redirect if not logged in
+        if (currentUser == null)
+        {
+            NavigationManager.NavigateTo("/login");
+            return;
+        }
+
+        // Load categories
+        categories = categoryRepository.GetAll();
+        
+        // Generate a short ID that fits in the database column (15 chars)
+        string shortId = GenerateShortId(15);
+        
+        // Initialize new article with required fields
+        article = new NewsArticle
+        {
+            NewsArticleId = shortId,
+            Headline = string.Empty, // Initialize non-nullable field
+            CreatedDate = DateTime.Now,
+            ModifiedDate = DateTime.Now,
+            NewsStatus = true,
+            CreatedById = currentUser.AccountId
+        };
+        
+        // Initialize checkbox from nullable bool
+        isActive = article.NewsStatus ?? true;
+    }
+
+    // Generate a short random ID of specified length
+    private string GenerateShortId(int length)
+    {
+        // Create a combination of timestamp and random chars
+        const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        var random = new Random();
+        
+        // Start with current timestamp (compact format) for uniqueness
+        string timestamp = DateTime.Now.ToString("yyMMddHHmmss");
+        int remainingLength = length - timestamp.Length;
+        
+        if (remainingLength <= 0)
+            return timestamp.Substring(0, length);
+            
+        // Add random chars to fill remaining length
+        var randomChars = new char[remainingLength];
+        for (int i = 0; i < remainingLength; i++)
+        {
+            randomChars[i] = chars[random.Next(chars.Length)];
+        }
+        
+        return timestamp + new string(randomChars);
+    }
+
+    private void CreateArticle()
+    {
+        errorMessage = null;
+        
+        try
+        {
+            // Validate required fields
+            if (string.IsNullOrWhiteSpace(article.Headline))
+            {
+                errorMessage = "Headline is required.";
+                return;
+            }
+            
+            // Set author info and timestamps
+            if (currentUser != null)
+            {
+                article.CreatedById = currentUser.AccountId;
+                article.UpdatedById = currentUser.AccountId;
+            }
+            
+            article.CreatedDate = DateTime.Now;
+            article.ModifiedDate = DateTime.Now;
+            
+            // Set the NewsStatus from our checkbox
+            article.NewsStatus = isActive;
+            
+            // Create the article
+            newsRepository.Add(article);
+            
+            // Redirect to news listing
+            NavigationManager.NavigateTo("/news");
+        }
+        catch (Exception ex)
+        {
+            // Get inner exception details
+            Exception innerEx = ex;
+            while (innerEx.InnerException != null)
+            {
+                innerEx = innerEx.InnerException;
+            }
+            
+            errorMessage = $"Error creating article: {innerEx.Message}";
+            Console.WriteLine($"Error details: {ex}");
+        }
+    }
+}

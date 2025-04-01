@@ -1,0 +1,201 @@
+@page "/accounts/create"
+@using System.ComponentModel.DataAnnotations
+@using newsmng_bussinessobject
+@using newsmng_repository
+@inject ISystemAccountRepository accountRepository
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Create Account</PageTitle>
+
+<h1>Create Account</h1>
+
+<hr />
+
+@if (error)
+{
+    <div class="alert alert-danger">
+        <p>@errorMessage</p>
+    </div>
+}
+
+<div class="row">
+    <div class="col-md-4">
+        <EditForm Model="@account" OnValidSubmit="CreateAccount" FormName="createAccountForm">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+
+            <div class="form-group mb-3">
+                <label for="id" class="control-label">Account ID</label>
+                <input type="text" id="id" value="@nextId" class="form-control" disabled />
+                <small class="text-muted">ID will be assigned automatically when account is created</small>
+            </div>
+
+            <div class="form-group mb-3">
+                <label for="name" class="control-label">Account Name</label>
+                <InputText id="name" @bind-Value="account.AccountName" class="form-control" />
+                <ValidationMessage For="@(() => account.AccountName)" />
+            </div>
+
+            <div class="form-group mb-3">
+                <label for="email" class="control-label">Email</label>
+                <InputText id="email" @bind-Value="account.AccountEmail" class="form-control" />
+                <ValidationMessage For="@(() => account.AccountEmail)" />
+            </div>
+
+            <div class="form-group mb-3">
+                <label for="password" class="control-label">Password</label>
+                <InputText id="password" @bind-Value="account.AccountPassword" class="form-control" />
+                <ValidationMessage For="@(() => account.AccountPassword)" />
+            </div>
+
+            <div class="form-group mb-3">
+                <label for="role" class="control-label">Role</label>
+                <InputSelect id="role" @bind-Value="account.AccountRole" class="form-select">
+                    <option value="0">Admin</option>
+                    <option value="1">Staff</option>
+                    <option value="2">Lecturer</option>
+                </InputSelect>
+                <ValidationMessage For="@(() => account.AccountRole)" />
+            </div>
+
+            <div class="form-group mb-3">
+                <button type="submit" class="btn btn-primary">Create</button>
+                <a href="/accounts" class="btn btn-secondary">Cancel</a>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    private SystemAccount account = new();
+    private bool error = false;
+    private string errorMessage = string.Empty;
+    private short nextId = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Check if user is admin
+        var userJson = await JSRuntime.InvokeAsync<string>("sessionStorage.getItem", "user");
+        if (!string.IsNullOrEmpty(userJson))
+        {
+            var currentUser = System.Text.Json.JsonSerializer.Deserialize<SystemAccount>(userJson);
+            if (currentUser == null || currentUser.AccountRole != 0)
+            {
+                NavigationManager.NavigateTo("/unauthorized");
+                return;
+            }
+        }
+        else
+        {
+            NavigationManager.NavigateTo("/login");
+            return;
+        }
+
+        // Calculate next available ID
+        try
+        {
+            var accounts = accountRepository.GetAll();
+            nextId = accounts.Any() ? (short)(accounts.Max(a => a.AccountId) + 1) : (short)1;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error calculating next ID: {ex.Message}");
+            nextId = 0; // Default if calculation fails
+        }
+
+        // Create a fresh account instance with default values
+        account = new SystemAccount
+        {
+            AccountRole = 2 // Default to Lecturer role
+            // Don't set AccountId - let the repository handle it
+        };
+    }
+
+    private void CreateAccount()
+{
+    try
+    {
+        // Reset error state
+        error = false;
+        errorMessage = string.Empty;
+        
+        // Basic validation
+        if (string.IsNullOrWhiteSpace(account.AccountName))
+        {
+            errorMessage = "Account name is required";
+            error = true;
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(account.AccountEmail))
+        {
+            errorMessage = "Email is required";
+            error = true;
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(account.AccountPassword))
+        {
+            errorMessage = "Password is required";
+            error = true;
+            return;
+        }
+
+        // Make sure all fields are filled properly
+        account.AccountRole ??= 2; // Default to Lecturer if null
+        
+        // Check if email is already in use
+        var existingAccounts = accountRepository.GetAll();
+        if (existingAccounts.Any(a => a.AccountEmail?.Equals(account.AccountEmail, StringComparison.OrdinalIgnoreCase) == true))
+        {
+            error = true;
+            errorMessage = "Email address is already in use. Please use a different email.";
+            return;
+        }
+
+        // Calculate the next available ID by finding the maximum ID and adding 1
+        short maxId = 0;
+        if (existingAccounts.Any())
+        {
+            maxId = existingAccounts.Max(a => a.AccountId);
+        }
+        
+        // Set the account ID to max + 1 to ensure uniqueness
+        account.AccountId = (short)(maxId + 1);
+        
+        // Log detailed information before attempting to add
+        Console.WriteLine($"Attempting to create account with details:");
+        Console.WriteLine($"- ID: {account.AccountId} (calculated from max ID {maxId})");
+        Console.WriteLine($"- Name: {account.AccountName}");
+        Console.WriteLine($"- Email: {account.AccountEmail}");
+        Console.WriteLine($"- Role: {account.AccountRole}");
+        Console.WriteLine($"- Password length: {(account.AccountPassword?.Length ?? 0)}");
+        
+        // Try to save the account
+        accountRepository.Add(account);
+        
+        // If we get here, it worked - redirect to account list
+        NavigationManager.NavigateTo("/accounts");
+    }
+    catch (Exception ex)
+    {
+        // Get inner exception details
+        var innerEx = ex;
+        while (innerEx.InnerException != null)
+        {
+            innerEx = innerEx.InnerException;
+        }
+        
+        error = true;
+        errorMessage = $"Error creating account: {innerEx.Message}";
+        Console.WriteLine($"Error details: {ex}");
+        
+        // More helpful error message now that we know the issue
+        if (ex.Message == "Exception of type 'System.Exception' was thrown.")
+        {
+            errorMessage = "Account ID already exists. Please try again.";
+        }
+    }
+}
+}

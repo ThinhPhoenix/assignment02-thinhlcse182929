@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
 using newsmng_bussinessobject;
 
 namespace newsmng_dao
@@ -30,122 +31,159 @@ namespace newsmng_dao
             }
         }
 
-
-//PLACE AT HTML
-<div class="search">
- <form method = "get" class="row mb-3 gap-2">
-  <input type = "text" class="form-control" name="searchMedicineName" placeholder="Search by medicine name..." value="@Model.SearchMedicineName">
-  <input type = "text" class="form-control" name="searchWarningAndPrecautions" placeholder="Search by warnings..." value="@Model.SearchWarningAndPrecautions">
-  <button type = "submit" class="btn btn-primary me-md-2">Search</button>
- </form>
-</div>
-
-//IF HAVE PAGEABLE AT TO PAGEABLE SEARCH FIELD AT CSHTML
-?page=@(Model.CurrentPage - 1)&searchMedicineName=@(Model.SearchMedicineName)&searchWarningAndPrecautions=@(Model.SearchWarningAndPrecautions)
-
-//CSHARP INDEX INIT (SEARCHES FIELD)
-[BindProperty(SupportsGet = true)]
-public string SearchMedicineName { get; set; }
-        [BindProperty(SupportsGet = true)]
-        public string SearchWarningAndPrecautions { get; set; }
-
-        //CSHARP INDEX INSIDE ONGET()
-        _medicineInformationRepo.Search(SearchMedicineName, SearchWarningAndPrecautions)
-
-//DAO
-public List<MedicineInformation> Search(string searchMedicineName, string searchWarningAndPrecautions)
+        public NewsArticle GetOne(string id)
         {
-            if (string.IsNullOrWhiteSpace(searchMedicineName) && string.IsNullOrWhiteSpace(searchWarningAndPrecautions))
-                return GetAll();
+            return _dbContext.NewsArticles
+                .Include(a => a.Tags)
+                .SingleOrDefault(a => a.NewsArticleId.Equals(id));
+        }
 
-            if (searchMedicineName != null)
-            {
-                searchMedicineName = searchMedicineName.Trim().ToLower();
-            }
-            if (searchWarningAndPrecautions != null)
-            {
-                searchWarningAndPrecautions = searchWarningAndPrecautions.Trim().ToLower();
-            }
-
-            return _dbContext.MedicineInformations
-                .Where(m =>
-                    m.MedicineName.ToLower().Contains(searchMedicineName) ||
-                    m.WarningsAndPrecautions.ToLower().Contains(searchWarningAndPrecautions))
-                .OrderBy(e => e.ManufacturerId)
+        public List<NewsArticle> GetAll()
+        {
+            return _dbContext.NewsArticles
+                .Include(m => m.Category)
+                .Include(m => m.CreatedBy)
                 .ToList();
         }
 
-
-//CSHTML                    
-<div class="pagination gap-3 mb-2">
-	@{
-		if (Model.CurrentPage > 1)
-		{
-			<a href = "?page=@(Model.CurrentPage - 1)&searchMedicineName=@(Model.SearchMedicineName)&searchWarningAndPrecautions=@(Model.SearchWarningAndPrecautions)" > Previous </ a >
-
-        }
-		<span>Page @Model.CurrentPage of @Model.TotalPages</span>
-		if (Model.CurrentPage<Model.TotalPages)
-
+        public List<NewsArticle> GetAllTrue()
         {
-
-            < a href = "?page=@(Model.CurrentPage + 1)&searchMedicineName=@(Model.SearchMedicineName)&searchWarningAndPrecautions=@(Model.SearchWarningAndPrecautions)" > Next </ a >
-
+            return _dbContext.NewsArticles
+                .Where(m => m.NewsStatus.Equals(true))
+                .Include(m => m.Category)
+                .Include(m => m.CreatedBy)
+                .ToList();
         }
-}
-</ div >
 
-//CSHARP INIT
-public int CurrentPage { get; set; }
-public int TotalPages { get; set; }
+        public void Add(NewsArticle a)
+        {
+            NewsArticle cur = GetOne(a.NewsArticleId);
+            if (cur != null)
+            {
+                throw new Exception();
+            }
+            _dbContext.NewsArticles.Add(a);
+            _dbContext.SaveChanges();
+        }
 
-//CSHARP IN ONGET()
-var pageQuery = HttpContext.Request.Query["page"];
-CurrentPage = 1;
+        public void Update(NewsArticle a)
+        {
+            NewsArticle cur = GetOne(a.NewsArticleId);
+            if (cur == null)
+            {
+                throw new Exception();
+            }
+            _dbContext.Entry(cur).CurrentValues.SetValues(a);
+            _dbContext.SaveChanges();
+        }
 
-if (!string.IsNullOrEmpty(pageQuery) && int.TryParse(pageQuery, out int parsedPage))
-{
-    CurrentPage = parsedPage;
-}
 
-dynamic pageable = _medicineInformationRepo.Pageable(_medicineInformationRepo.Search(SearchMedicineName, SearchWarningAndPrecautions), CurrentPage, 3);
+        public void Delete(string id)
+        {
+            var article = _dbContext.NewsArticles
+                .Include(a => a.Tags) // Load related tags
+                .FirstOrDefault(a => a.NewsArticleId.Equals(id));
 
-TotalPages = pageable.TotalPages;
-Object = pageable.Data;
+            if (article != null)
+            {
+                // Clear the relationship between article and tags
+                // This will remove entries from the join table without deleting the tags
+                if (article.Tags != null)
+                {
+                    article.Tags.Clear();
+                    _dbContext.SaveChanges(); // Save changes to remove relationships
+                }
 
-//DAO
-public class PageableResult<T>
-{
-    public List<T> Data { get; set; }
-    public int TotalPages { get; set; }
-}
+                // Now remove the article
+                _dbContext.NewsArticles.Remove(article);
+                _dbContext.SaveChanges(); // Delete the article
+            }
+        }
 
-public PageableResult<MedicineInformation> Pageable(List<MedicineInformation> data, int curPage, int pageSize)
-{
-    if (curPage <= 0)
-        throw new ArgumentException("Current page must be greater than 0.");
-    if (pageSize <= 0)
-        throw new ArgumentException("Number of items per page must be greater than 0.");
+        public List<NewsArticle> Search(string title, string content)
+        {
+            if (string.IsNullOrWhiteSpace(title) && string.IsNullOrWhiteSpace(content))
+                return GetAll();
 
-    // Get total count of items
-    int totalItems = data.Count();
+            if (title != null)
+            {
+                title = title.Trim().ToLower();
+            }
+            if (content != null)
+            {
+                content = content.Trim().ToLower();
+            }
 
-    // Calculate total pages
-    int totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
+            return _dbContext.NewsArticles
+                .Where(m =>
+                    m.NewsTitle.ToLower().Contains(title) &&
+                    m.NewsContent.ToLower().Contains(content))
+                .OrderBy(e => e.NewsArticleId)
+                .ToList();
+        }
 
-    // Get data for current page
-    var Res = data
-        .OrderBy(e => e.ManufacturerId) // Make sure results are in a deterministic order
-        .Skip((curPage - 1) * pageSize)
-        .Take(pageSize)
-        .ToList();
+        public List<NewsArticle> SearchTrue(string title, string content)
+        {
+            // If both title and content are empty or whitespace, return all articles with NewsStatus = true
+            if (string.IsNullOrWhiteSpace(title) && string.IsNullOrWhiteSpace(content))
+            {
+                return _dbContext.NewsArticles
+                    .Where(m => m.NewsStatus == true)
+                    .OrderBy(e => e.NewsArticleId)
+                    .ToList();
+            }
 
-    return new PageableResult<MedicineInformation>
-    {
-        Data = Res,
-        TotalPages = totalPages
-    };
-}
-                
+            // Trim and convert to lowercase for case-insensitive search
+            if (title != null)
+            {
+                title = title.Trim().ToLower();
+            }
+            if (content != null)
+            {
+                content = content.Trim().ToLower();
+            }
+
+            // Return articles with NewsStatus = true and matching title or content
+            return _dbContext.NewsArticles
+                .Where(m =>
+                    m.NewsStatus == true && // Ensure only articles with NewsStatus = true are considered
+                    (string.IsNullOrEmpty(title) || m.NewsTitle.ToLower().Contains(title)) && // Match title if provided
+                    (string.IsNullOrEmpty(content) || m.NewsContent.ToLower().Contains(content))) // Match content if provided
+                .OrderBy(e => e.NewsArticleId)
+                .ToList();
+        }
+
+        public class PageableResult<T>
+        {
+            public List<T> Data { get; set; }
+            public int TotalPages { get; set; }
+        }
+
+        public PageableResult<NewsArticle> Pageable(List<NewsArticle> data, int curPage, int pageSize)
+        {
+            if (curPage <= 0)
+                throw new ArgumentException("Current page must be greater than 0.");
+            if (pageSize <= 0)
+                throw new ArgumentException("Number of items per page must be greater than 0.");
+
+            // Get total count of items
+            int totalItems = data.Count();
+
+            // Calculate total pages
+            int totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
+
+            // Get data for current page
+            var Res = data
+                .OrderBy(e => e.NewsArticleId) // Make sure results are in a deterministic order
+                .Skip((curPage - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            return new PageableResult<NewsArticle>
+            {
+                Data = Res,
+                TotalPages = totalPages
+            };
+        }
     }
 }
