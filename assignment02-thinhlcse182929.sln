@@ -4,6 +4,12 @@ VisualStudioVersion = 17.13.35828.75
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "blazor-newsmng", "blazor-newsmng\blazor-newsmng.csproj", "{097E3643-E1FC-4BCD-A314-052DBAC73378}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "newsmng_dao", "news_dao\newsmng_dao.csproj", "{D811BCD7-A692-49A7-BCBC-08667788623A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "newsmng_bussinessobject", "news_bussinessobject\newsmng_bussinessobject.csproj", "{40D6A34B-822F-42C4-B13C-A3E533A97D4B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "newsmng_repository", "newsmng_repository\newsmng_repository.csproj", "{2D4DAEE5-8B67-4174-AD55-1F83292E3537}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -14,6 +20,18 @@ Global
 		{097E3643-E1FC-4BCD-A314-052DBAC73378}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{097E3643-E1FC-4BCD-A314-052DBAC73378}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{097E3643-E1FC-4BCD-A314-052DBAC73378}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D811BCD7-A692-49A7-BCBC-08667788623A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D811BCD7-A692-49A7-BCBC-08667788623A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D811BCD7-A692-49A7-BCBC-08667788623A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D811BCD7-A692-49A7-BCBC-08667788623A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{40D6A34B-822F-42C4-B13C-A3E533A97D4B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{40D6A34B-822F-42C4-B13C-A3E533A97D4B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{40D6A34B-822F-42C4-B13C-A3E533A97D4B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{40D6A34B-822F-42C4-B13C-A3E533A97D4B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2D4DAEE5-8B67-4174-AD55-1F83292E3537}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2D4DAEE5-8B67-4174-AD55-1F83292E3537}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2D4DAEE5-8B67-4174-AD55-1F83292E3537}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2D4DAEE5-8B67-4174-AD55-1F83292E3537}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
