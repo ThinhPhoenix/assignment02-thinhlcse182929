@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace newsmng_bussinessobject;
 
@@ -25,7 +26,38 @@ public partial class FunewsManagementContext : DbContext
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
 #warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
-        => optionsBuilder.UseSqlServer("Server=(local);Uid=sa;Pwd=12345;Database=FUNewsManagement;TrustServerCertificate=True");
+        => optionsBuilder.UseSqlServer(GetConnectionString());
+
+    #region GetConnectionString()
+    /*
+    1. Nuget install
+    ```bash
+    dotnet add package Microsoft.Extensions.Configuration --version 5.0.0
+    dotnet add package Microsoft.Extensions.Configuration.Json --version 5.0.0
+    ```
+
+    2. Edit OnConfiguring method
+    ```csharp
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        => optionsBuilder.UseSqlServer(GetConnectionString());
+    ```
+
+    3. Edit appsettings.json
+    ```json
+    "ConnectionStrings": {
+        "DBConnString": "Server=(local);Uid=sa;Pwd=12345;Database=YOUR_DB_NAME;TrustServerCertificate=True"
+    }
+    ```
+    */
+    String GetConnectionString()
+    {
+        IConfiguration config = new ConfigurationBuilder()
+            .SetBasePath(Directory.GetCurrentDirectory())
+            .AddJsonFile("appsettings.json", true, true)
+            .Build();
+        return config.GetConnectionString("DBConnString");
+    }
+    #endregion
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
