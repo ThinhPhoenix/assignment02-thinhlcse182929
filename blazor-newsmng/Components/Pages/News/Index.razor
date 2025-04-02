@@ -134,6 +134,11 @@ else
             if (!string.IsNullOrEmpty(userJson))
             {
                 currentUser = JsonSerializer.Deserialize<SystemAccount>(userJson);
+                    if (currentUser.AccountRole != 1 && currentUser.AccountRole != 2)
+                    {
+                        NavigationManager.NavigateTo("/unauthorized");
+                        return;
+                    }
             }
             else
             {
@@ -263,10 +268,42 @@ else
 
     private async Task DeleteArticle(string id)
     {
-        if (await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to delete this article?"))
+        try
         {
-            newsRepository.Delete(id);
-            await LoadData();
+            // Get the article details
+            var article = articles.FirstOrDefault(a => a.NewsArticleId == id);
+            
+            if (article == null)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Article not found.");
+                return;
+            }
+            
+            // Check if user has Staff role (role 1)
+            if (currentUser?.AccountRole != 1)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Only Staff members can delete articles.");
+                return;
+            }
+            
+            // Check if the user is the creator of the article
+            if (currentUser?.AccountId != article.CreatedById)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "You can only delete articles you created.");
+                return;
+            }
+            
+            // Proceed with deletion if the user is a Staff member AND the creator
+            if (await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to delete this article?"))
+            {
+                newsRepository.Delete(id);
+                await LoadData();
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error deleting article: {ex.Message}");
+            Console.WriteLine($"Error deleting article: {ex}");
         }
     }
 }

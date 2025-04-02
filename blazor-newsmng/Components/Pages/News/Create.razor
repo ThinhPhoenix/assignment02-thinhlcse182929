@@ -109,40 +109,52 @@
             if (!string.IsNullOrEmpty(userJson))
             {
                 currentUser = System.Text.Json.JsonSerializer.Deserialize<SystemAccount>(userJson);
+                
+                // Check if user has role 1 (Staff)
+                if (currentUser.AccountRole != 1)
+                {
+                    NavigationManager.NavigateTo("/unauthorized");
+                    return;
+                }
             }
+            else
+            {
+                NavigationManager.NavigateTo("/login");
+                return;
+            }
+
+            // Redirect if not logged in
+            if (currentUser == null)
+            {
+                NavigationManager.NavigateTo("/login");
+                return;
+            }
+
+            // Load categories
+            categories = categoryRepository.GetAll();
+            
+            // Generate a short ID that fits in the database column (15 chars)
+            string shortId = GenerateShortId(15);
+            
+            // Initialize new article with required fields
+            article = new NewsArticle
+            {
+                NewsArticleId = shortId,
+                Headline = string.Empty, // Initialize non-nullable field
+                CreatedDate = DateTime.Now,
+                ModifiedDate = DateTime.Now,
+                NewsStatus = true,
+                CreatedById = currentUser.AccountId
+            };
+            
+            // Initialize checkbox from nullable bool
+            isActive = article.NewsStatus ?? true;
         }
         catch
         {
             NavigationManager.NavigateTo("/login");
             return;
         }
-
-        // Redirect if not logged in
-        if (currentUser == null)
-        {
-            NavigationManager.NavigateTo("/login");
-            return;
-        }
-
-        // Load categories
-        categories = categoryRepository.GetAll();
-        
-        // Generate a short ID that fits in the database column (15 chars)
-        string shortId = GenerateShortId(15);
-        
-        // Initialize new article with required fields
-        article = new NewsArticle
-        {
-            NewsArticleId = shortId,
-            Headline = string.Empty, // Initialize non-nullable field
-            CreatedDate = DateTime.Now,
-            ModifiedDate = DateTime.Now,
-            NewsStatus = true,
-            CreatedById = currentUser.AccountId
-        };
-        
-        // Initialize checkbox from nullable bool
-        isActive = article.NewsStatus ?? true;
     }
 
     // Generate a short random ID of specified length

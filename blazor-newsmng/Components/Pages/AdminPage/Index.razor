@@ -2,6 +2,7 @@
 @using newsmng_bussinessobject
 @using newsmng_repository
 @inject ISystemAccountRepository accountRepository
+@inject INewsArticleRepository newsRepository
 @inject NavigationManager NavigationManager
 @inject IJSRuntime JSRuntime
 
@@ -43,7 +44,7 @@ else
                         <td>@account.AccountName</td>
                         <td>@account.AccountEmail</td>
                         <td>@GetRoleName(account.AccountRole)</td>
-                        <td>@account.AccountPassword</td>
+                        <td>********</td>
                         <td>
                             <a href="@($"/accounts/edit/{account.AccountId}")" class="btn btn-warning btn-sm">Edit</a>
                             <a href="@($"/accounts/details/{account.AccountId}")" class="btn btn-info btn-sm">Details</a>
@@ -56,12 +57,67 @@ else
     </div>
 }
 
+<h1>Dashboard</h1>
+
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="form-group">
+            <label for="year">Select Year:</label>
+            <select id="year" class="form-control" value="@selectedYear" @onchange="@(async (e) => { selectedYear = Convert.ToInt32(e.Value); await YearChanged(); })">
+                @for (int y = DateTime.Now.Year; y >= DateTime.Now.Year - 5; y--)
+                {
+                    <option value="@y">@y</option>
+                }
+            </select>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-10">
+        <div class="card">
+            <div class="card-header">
+                Monthly Article Distribution for @selectedYear
+            </div>
+            <div class="card-body">
+                <div style="width: 100%; height: 400px;">
+                    <canvas id="monthlyChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div> 
+
 @code {
     private IList<SystemAccount> accounts = new List<SystemAccount>();
     private bool loading = true;
     private bool error = false;
     private string errorMessage = string.Empty;
     private SystemAccount? currentUser;
+    
+    // Dashboard properties
+    private int selectedYear = DateTime.Now.Year;
+    private Dictionary<int, int> monthlyData = new Dictionary<int, int>();
+
+    private string MonthName(int month)
+    {
+        return month switch
+        {
+            1 => "Jan",
+            2 => "Feb",
+            3 => "Mar",
+            4 => "Apr",
+            5 => "May",
+            6 => "Jun",
+            7 => "Jul",
+            8 => "Aug",
+            9 => "Sep",
+            10 => "Oct",
+            11 => "Nov",
+            12 => "Dec",
+            _ => "?"
+        };
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -88,16 +144,218 @@ else
 
             // Load all accounts
             accounts = accountRepository.GetAll();
+            
+            // Load dashboard data
+            await LoadDashboardData();
         }
         catch (Exception ex)
         {
             error = true;
-            errorMessage = $"Error loading accounts: {ex.Message}";
+            errorMessage = $"Error loading data: {ex.Message}";
             Console.WriteLine($"Error details: {ex}");
         }
         finally
         {
             loading = false;
+        }
+    }
+    
+    private async Task LoadDashboardData()
+    {
+        try
+        {
+            // Initialize dictionary with zeros for all months
+            monthlyData = new Dictionary<int, int>();
+            for (int i = 1; i <= 12; i++)
+            {
+                monthlyData[i] = 0;
+            }
+            
+            // Try to get data from repository first
+            try {
+                var repoData = newsRepository.GetDashboard(selectedYear);
+                if (repoData != null && repoData.Count > 0)
+                {
+                    monthlyData = repoData;
+                    Console.WriteLine($"Loaded data from repository for year {selectedYear}");
+                }
+                else
+                {
+                    // Repository method didn't return data, calculate manually
+                    CalculateMonthlyData();
+                }
+            }
+            catch {
+                // Repository method doesn't exist or threw an error, calculate manually
+                CalculateMonthlyData();
+            }
+            
+            // Debug log
+            foreach (var kvp in monthlyData)
+            {
+                Console.WriteLine($"Month {kvp.Key}: {kvp.Value} articles");
+            }
+            
+            // Render the chart
+            await RenderCustomChart();
+            
+            // Trigger a UI refresh
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            error = true;
+            errorMessage = $"Error loading dashboard data: {ex.Message}";
+            Console.WriteLine($"Error loading dashboard: {ex}");
+        }
+    }
+    
+    private void CalculateMonthlyData()
+    {
+        Console.WriteLine("Calculating monthly data manually");
+        var allArticles = newsRepository.GetAll();
+        foreach (var article in allArticles)
+        {
+            if (article.CreatedDate.HasValue && article.CreatedDate.Value.Year == selectedYear)
+            {
+                int month = article.CreatedDate.Value.Month;
+                monthlyData[month]++;
+            }
+        }
+    }
+    
+    private async Task YearChanged()
+    {
+        Console.WriteLine($"Year changed to {selectedYear}");
+        await LoadDashboardData();
+    }
+    
+    private async Task RenderCustomChart()
+    {
+        try
+        {
+            var months = new[] {"January", "February", "March", "April", "May", "June", 
+                         "July", "August", "September", "October", "November", "December"};
+            
+            var dataValues = new int[12];
+            for (int i = 1; i <= 12; i++)
+            {
+                dataValues[i-1] = monthlyData.ContainsKey(i) ? monthlyData[i] : 0;
+            }
+            
+            var dataJson = System.Text.Json.JsonSerializer.Serialize(dataValues);
+            Console.WriteLine($"Rendering chart with data: {dataJson}");
+            
+            await JSRuntime.InvokeVoidAsync("renderChart", months, dataValues);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error rendering chart: {ex}");
+        }
+    }
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Add Chart.js library
+            await JSRuntime.InvokeVoidAsync("eval", @"
+                if (!document.getElementById('chartjs-script')) {
+                    var script = document.createElement('script');
+                    script.id = 'chartjs-script';
+                    script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+                    script.onload = function() {
+                        console.log('Chart.js loaded successfully');
+                    };
+                    document.head.appendChild(script);
+                }
+            ");
+
+            // Define our chart rendering function
+            await JSRuntime.InvokeVoidAsync("eval", @"
+                var chartInstance = null;
+                
+                window.renderChart = function(months, data) {
+                    console.log('renderChart called with data:', data);
+                    
+                    // Make sure Chart.js is loaded
+                    if (typeof Chart === 'undefined') {
+                        console.error('Chart.js not loaded yet');
+                        setTimeout(function() { window.renderChart(months, data); }, 500);
+                        return;
+                    }
+                    
+                    const ctx = document.getElementById('monthlyChart');
+                    if (!ctx) {
+                        console.error('Chart canvas not found');
+                        return;
+                    }
+                    
+                    // Destroy existing chart if it exists
+                    if (chartInstance) {
+                        chartInstance.destroy();
+                    }
+                    
+                    // Create new chart
+                    chartInstance = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: months.map(m => m.substring(0, 3)),
+                            datasets: [{
+                                label: 'Number of Articles',
+                                data: data,
+                                backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                                borderColor: 'rgba(54, 162, 235, 1)',
+                                borderWidth: 2
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    title: {
+                                        display: true,
+                                        text: 'Number of Articles'
+                                    },
+                                    ticks: {
+                                        precision: 0
+                                    }
+                                },
+                                x: {
+                                    title: {
+                                        display: true,
+                                        text: 'Month'
+                                    }
+                                }
+                            },
+                            plugins: {
+                                title: {
+                                    display: true,
+                                    text: 'Articles per Month',
+                                    font: {
+                                        size: 16
+                                    }
+                                },
+                                tooltip: {
+                                    callbacks: {
+                                        title: function(tooltipItems) {
+                                            return months[tooltipItems[0].dataIndex];
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                    
+                    console.log('Chart.js chart rendered successfully');
+                }
+            ");
+            
+            // Render initial chart with a delay to ensure Chart.js is loaded
+            await Task.Delay(500);
+            await RenderCustomChart();
         }
     }
     
@@ -107,7 +365,8 @@ else
         {
             0 => "Admin",
             1 => "Staff",
-            2 => "Lecturer"
+            2 => "Lecturer",
+            _ => "Unknown"
         };
     }
 
