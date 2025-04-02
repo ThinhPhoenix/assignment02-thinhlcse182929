@@ -1,0 +1,171 @@
+@page "/categories/create"
+@using newsmng_bussinessobject
+@using newsmng_repository
+@inject ICategoryRepository categoryRepository
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Create Category</PageTitle>
+
+<h1>Create</h1>
+
+<h4>Category</h4>
+<hr />
+<div class="row">
+    <div class="col-md-4">
+        <EditForm Model="@category" OnValidSubmit="CreateCategory" FormName="createCategoryForm">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+            
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="alert alert-danger mb-3">
+                    @errorMessage
+                </div>
+            }
+            
+            <div class="form-group mb-3">
+                <label for="categoryName" class="control-label">Category Name *</label>
+                <InputText id="categoryName" @bind-Value="category.CategoryName" class="form-control" required />
+                <ValidationMessage For="@(() => category.CategoryName)" />
+            </div>
+            
+            <div class="form-group mb-3">
+                <label for="categoryDescription" class="control-label">Category Description *</label>
+                <InputText id="categoryDescription" @bind-Value="category.CategoryDesciption" class="form-control" required />
+                <ValidationMessage For="@(() => category.CategoryDesciption)" />
+                <small class="text-muted">This field is required</small>
+            </div>
+            
+            <div class="form-group mb-3">
+                <label for="parentCategoryId" class="control-label">Parent Category</label>
+                <InputSelect id="parentCategoryId" @bind-Value="parentCategoryIdString" class="form-control">
+                    <option value="">-- Select Parent Category (Optional) --</option>
+                    @if (parentCategories != null)
+                    {
+                        @foreach (var parentCategory in parentCategories)
+                        {
+                            <option value="@parentCategory.CategoryId.ToString()">@parentCategory.CategoryName</option>
+                        }
+                    }
+                </InputSelect>
+                <small class="text-muted">Optional: Select a parent category if this is a subcategory</small>
+            </div>
+            
+            <div class="form-group mb-3">
+                <div class="form-check">
+                    <InputCheckbox id="isActive" @bind-Value="isActive" class="form-check-input" />
+                    <label class="form-check-label" for="isActive">Is Active</label>
+                </div>
+                <small class="text-muted">Check to make this category active</small>
+            </div>
+            
+            <div class="form-group mb-3">
+                <button type="submit" class="btn btn-primary">Create</button>
+                <a href="/categories" class="btn btn-secondary ms-2">Cancel</a>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    private Category category = new();
+    private List<Category> parentCategories;
+    private string errorMessage;
+    private SystemAccount currentUser;
+    private bool isActive = true; // Default to true
+    private string parentCategoryIdString { get; set; } = ""; // New field for binding
+    
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // Check user authentication
+            var userJson = await JSRuntime.InvokeAsync<string>("sessionStorage.getItem", "user");
+            if (string.IsNullOrEmpty(userJson))
+            {
+                NavigationManager.NavigateTo("/login");
+                return;
+            }
+
+            currentUser = System.Text.Json.JsonSerializer.Deserialize<SystemAccount>(userJson);
+            
+            if (currentUser.AccountRole != 1)
+            {
+                NavigationManager.NavigateTo("/unauthorized");
+                return;
+            }
+
+            // Initialize new category
+            category = new Category();
+            
+            // Load potential parent categories
+            parentCategories = categoryRepository.GetAll();
+        }
+        catch
+        {
+            NavigationManager.NavigateTo("/login");
+        }
+    }
+
+    private void CreateCategory()
+    {
+        errorMessage = null;
+        
+        try
+        {
+            // Validate required fields
+            if (string.IsNullOrWhiteSpace(category.CategoryName))
+            {
+                errorMessage = "Category name is required.";
+                return;
+            }
+            
+            if (string.IsNullOrWhiteSpace(category.CategoryDesciption))
+            {
+                errorMessage = "Category description is required.";
+                return;
+            }
+            
+            // Make absolutely sure CategoryDesciption is not null
+            if (category.CategoryDesciption == null)
+            {
+                category.CategoryDesciption = string.Empty;
+            }
+            
+            // Set IsActive from our checkbox
+            category.IsActive = isActive;
+            
+            // Set ParentCategoryId from our string
+            if (!string.IsNullOrEmpty(parentCategoryIdString) && short.TryParse(parentCategoryIdString, out short parentId))
+            {
+                category.ParentCategoryId = parentId;
+            }
+            else
+            {
+                category.ParentCategoryId = null;
+            }
+            
+            // Log what we're about to save to help debug
+            Console.WriteLine($"Creating category: Name={category.CategoryName}, Description={category.CategoryDesciption}");
+            
+            // Create the category
+            categoryRepository.Add(category);
+            
+            // Redirect to category listing
+            NavigationManager.NavigateTo("/categories");
+        }
+        catch (Exception ex)
+        {
+            // Get inner exception details
+            Exception innerEx = ex;
+            while (innerEx.InnerException != null)
+            {
+                innerEx = innerEx.InnerException;
+            }
+            
+            errorMessage = $"Error creating category: {innerEx.Message}";
+            Console.WriteLine($"Error details: {ex}");
+        }
+    }
+}

@@ -12,4 +12,8 @@
     <ProjectReference Include="..\newsmng_repository\newsmng_repository.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Components\Pages\Categories\" />
+  </ItemGroup>
+
 </Project>

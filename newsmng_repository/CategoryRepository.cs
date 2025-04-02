@@ -20,5 +20,24 @@ namespace newsmng_repository
         {
             return CategoryDAO.Instance.GetAll();
         }
+        public Category GetOne(short id)
+        {
+            return CategoryDAO.Instance.GetOne(id);
+        }
+
+        public void Add(Category a)
+        {
+            CategoryDAO.Instance.Add(a);
+        }
+
+        public void Update(Category a)
+        {
+            CategoryDAO.Instance.Update(a);
+        }
+
+        public void Delete(short id)
+        {
+            CategoryDAO.Instance.Delete(id);
+        }
     }
 }

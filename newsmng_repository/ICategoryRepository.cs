@@ -13,5 +13,12 @@ namespace newsmng_repository
     {
         public List<object> GetSelectList();
         public List<Category> GetAll();
+        public Category GetOne(short id);
+
+        public void Add(Category a);
+
+        public void Update(Category a);
+
+        public void Delete(short id);
     }
 }

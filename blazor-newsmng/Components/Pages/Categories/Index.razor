@@ -1,0 +1,106 @@
+@page "/categories"
+@using newsmng_bussinessobject
+@using newsmng_repository
+@inject ICategoryRepository categoryRepository
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Categories</PageTitle>
+
+<h1>Categories</h1>
+
+<p>
+    <a href="/news" class="btn btn-primary">NewsArticle Management</a>
+</p>
+<p>
+    <a href="/categories/create" class="btn btn-primary">Create New</a>
+</p>
+
+@if (errorMessage != null)
+{
+    <div class="alert alert-danger">@errorMessage</div>
+}
+
+@if (categories == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Category ID</th>
+                <th>Category Name</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var category in categories)
+            {
+                <tr>
+                    <td>@category.CategoryId</td>
+                    <td>@category.CategoryName</td>
+                    <td>
+                        <a href="/categories/edit/@category.CategoryId" class="btn btn-sm btn-outline-primary">Edit</a>
+                        <a href="/categories/details/@category.CategoryId" class="btn btn-sm btn-outline-info">Details</a>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteCategory(category.CategoryId)">Delete</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<Category> categories;
+    private string errorMessage;
+    private SystemAccount currentUser;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // Check user authentication
+            var userJson = await JSRuntime.InvokeAsync<string>("sessionStorage.getItem", "user");
+            if (string.IsNullOrEmpty(userJson))
+            {
+                NavigationManager.NavigateTo("/login");
+                return;
+            }
+
+            currentUser = System.Text.Json.JsonSerializer.Deserialize<SystemAccount>(userJson);
+            
+            if (currentUser.AccountRole != 1)
+            {
+                NavigationManager.NavigateTo("/unauthorized");
+                return;
+            }
+
+            // Load categories
+            categories = categoryRepository.GetAll();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error loading categories: {ex.Message}";
+        }
+    }
+
+    private async Task DeleteCategory(short id)
+    {
+        bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to delete this category?");
+        
+        if (confirmed)
+        {
+            try
+            {
+                categoryRepository.Delete(id);
+                categories = categoryRepository.GetAll(); // Refresh the list
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"Error deleting category: {ex.Message}";
+            }
+        }
+    }
+}

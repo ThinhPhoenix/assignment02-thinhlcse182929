@@ -1,0 +1,154 @@
+﻿@page "/profile"
+@using System.ComponentModel.DataAnnotations
+@using newsmng_bussinessobject
+@using newsmng_repository
+@inject ISystemAccountRepository accountRepository
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+<PageTitle>My Profile</PageTitle>
+
+<h1>My Profile</h1>
+
+<hr />
+
+@if (loading)
+{
+    <p><em>Loading...</em></p>
+}
+else if (error)
+{
+    <div class="alert alert-danger">
+        <p>@errorMessage</p>
+        <a href="/" class="btn btn-secondary">Back to Home</a>
+    </div>
+}
+else
+{
+    <div class="row">
+        <div class="col-md-4">
+            <EditForm Model="@account" OnValidSubmit="SaveAccount" FormName="editProfileForm">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+
+                <input type="hidden" @bind-value="account.AccountId" />
+                <input type="hidden" @bind-value="account.AccountRole" />
+
+                <div class="form-group mb-3">
+                    <label for="name" class="control-label">Account Name</label>
+                    <InputText id="name" @bind-Value="account.AccountName" class="form-control" />
+                    <ValidationMessage For="@(() => account.AccountName)" />
+                </div>
+
+                <div class="form-group mb-3">
+                    <label for="email" class="control-label">Email</label>
+                    <InputText id="email" @bind-Value="account.AccountEmail" class="form-control" />
+                    <ValidationMessage For="@(() => account.AccountEmail)" />
+                </div>
+
+                <div class="form-group mb-3">
+                    <label for="password" class="control-label">Password</label>
+                    <InputText id="password" type="password" @bind-Value="account.AccountPassword" class="form-control" />
+                    <ValidationMessage For="@(() => account.AccountPassword)" />
+                </div>
+
+                <div class="form-group mb-3">
+                    <label class="control-label">Role</label>
+                    <input type="text" value="@GetRoleName(account.AccountRole)" class="form-control" disabled />
+                </div>
+
+                <div class="form-group mb-3">
+                    <button type="submit" class="btn btn-primary">Save</button>
+                    <a href="/" class="btn btn-secondary">Cancel</a>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@code {
+    private SystemAccount account = new();
+    private bool loading = true;
+    private bool error = false;
+    private string errorMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // Get current user from session storage
+            var userJson = await JSRuntime.InvokeAsync<string>("sessionStorage.getItem", "user");
+            if (string.IsNullOrEmpty(userJson))
+            {
+                NavigationManager.NavigateTo("/login");
+                return;
+            }
+
+            var currentUser = System.Text.Json.JsonSerializer.Deserialize<SystemAccount>(userJson);
+            if (currentUser == null || currentUser.AccountId == 0)
+            {
+                NavigationManager.NavigateTo("/login");
+                return;
+            }
+
+            // Load user's account details
+            account = accountRepository.GetOne(currentUser.AccountId);
+            
+            if (account == null || account.AccountId == 0)
+            {
+                error = true;
+                errorMessage = "Could not load your profile information.";
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            error = true;
+            errorMessage = $"Error loading profile: {ex.Message}";
+            Console.WriteLine($"Error details: {ex}");
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task SaveAccount()
+    {
+        try
+        {
+            // Save the original role to ensure it's not changed
+            var originalAccountRole = account.AccountRole;
+            
+            // Update the account
+            accountRepository.Update(account);
+            
+            // Ensure role wasn't changed
+            account.AccountRole = originalAccountRole;
+            
+            // Update the session
+            var updatedJson = System.Text.Json.JsonSerializer.Serialize(account);
+            await JSRuntime.InvokeVoidAsync("sessionStorage.setItem", "user", updatedJson);
+            
+            await JSRuntime.InvokeVoidAsync("alert", "Profile updated successfully!");
+            NavigationManager.NavigateTo("/news");
+        }
+        catch (Exception ex)
+        {
+            error = true;
+            errorMessage = $"Error saving profile: {ex.Message}";
+            Console.WriteLine($"Error details: {ex}");
+        }
+    }
+
+    private string GetRoleName(int? role)
+    {
+        return role switch
+        {
+            0 => "Admin",
+            1 => "Staff",
+            2 => "Lecturer",
+            _ => "Unknown"
+        };
+    }
+}

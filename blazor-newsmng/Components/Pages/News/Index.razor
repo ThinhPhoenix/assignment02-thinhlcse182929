@@ -12,13 +12,15 @@
 
 @if (currentUser != null)
 {
-    <h1>Hello @(currentUser.AccountName)</h1>
+    <h1>Hello <a href="/profile">@(currentUser.AccountName)</a></h1>
 }
 else
 {
     <h1>Hello Guest</h1>
 }
-
+<p>
+    <a href="/categories" class="btn btn-primary">Categories Management</a>
+</p>
 <p>
     <a href="/news/create" class="btn btn-primary">Create New</a>
 </p>
